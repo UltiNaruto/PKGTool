@@ -1,8 +1,7 @@
 {
   "profiles": {
     "PKGTool": {
-      "commandName": "Project",
-      "commandLineArgs": "-c \"D:\\Projects\\PKGTool\\PKGTool\\bin\\Debug\\net5.0\\s010_cave\""
+      "commandName": "Project"
     }
   }
 }

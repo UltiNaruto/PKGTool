@@ -7,6 +7,7 @@ namespace Dread.FileFormats
 {
     public class PKG : Misc.Structs.BinaryStruct
     {
+        public Int32 HeaderPaddingLength = 0;
         public List<KeyValuePair<UInt64, MemoryStream>> Files = new List<KeyValuePair<UInt64, MemoryStream>>();
 
         public void Close()
@@ -20,7 +21,7 @@ namespace Dread.FileFormats
         {
             Int32 i = 0;
             Int32[,] offsets = new Int32[Files.Count, 2];
-            Int32 cursor = 12 + Files.Count * 16;
+            Int32 cursor = 12 + Files.Count * 16 + HeaderPaddingLength;
             if ((cursor % 8) != 0) cursor += 8 - (cursor % 8);
             foreach (var file in Files)
             {
@@ -66,7 +67,10 @@ namespace Dread.FileFormats
             }
 
             if (header_size != (Int32)stream.Position)
-                throw new Exception("Invalid PKG file! (Guessed header size doesn't correspond to the real size)");
+            {
+                HeaderPaddingLength = header_size - (Int32)stream.Position;
+                stream.Position += HeaderPaddingLength;
+            }
 
             // padding
             if ((stream.Position % 8) != 0) stream.Position += 8 - (stream.Position % 8);
@@ -102,6 +106,8 @@ namespace Dread.FileFormats
                 writer.Write(offsets[i, 0]);
                 writer.Write(offsets[i, 1]);
             }
+
+            writer.Write(Enumerable.Repeat<byte>(0, HeaderPaddingLength).ToArray());
 
             header_size = (Int32)stream.Position;
 

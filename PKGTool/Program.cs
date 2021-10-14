@@ -128,6 +128,7 @@ namespace PKGTool
 
                         using(var list = new StreamWriter(String.Join(Path.DirectorySeparatorChar, outPath, "files.list")))
                         {
+                            list.WriteLine($"Padding = {pkg.HeaderPaddingLength}");
                             foreach (var file in pkg.Files)
                             {
                                 fn = GenerateFileName(file.Key, file.Value);
@@ -175,6 +176,7 @@ namespace PKGTool
 
                         using (var list = new StreamReader(String.Join(Path.DirectorySeparatorChar, args[1], "files.list")))
                         {
+                            pkg.HeaderPaddingLength = Convert.ToInt32(list.ReadLine().Substring("Padding = ".Length));
                             while (!list.EndOfStream)
                             {
                                 fn = list.ReadLine().TrimEnd('\r', '\n');
