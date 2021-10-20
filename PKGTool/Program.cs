@@ -1,6 +1,9 @@
-﻿using System;
+﻿using HashLib.Checksum;
+using Newtonsoft.Json.Linq;
+using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 
 namespace PKGTool
@@ -90,10 +93,14 @@ namespace PKGTool
 
         static void Main(string[] args)
         {
+            CRC64 crc = new CRC64();
             FileStream tmp = null;
             String fn = String.Empty;
+            String filePath = String.Empty;
             String outPath = String.Empty;
             Dread.FileFormats.PKG pkg = new Dread.FileFormats.PKG();
+            Dictionary<String, UInt64> AssetIDByFilePath = JObject.Parse(Encoding.UTF8.GetString(Properties.Resources.resource_infos)).ToObject<Dictionary<String, UInt64>>();
+            Dictionary<UInt64, String> AssetFilePathByID = AssetIDByFilePath.ToDictionary(kvp => kvp.Value, kvp => kvp.Key);
             try
             {
                 if (args.Length >= 2)
@@ -131,7 +138,15 @@ namespace PKGTool
                             list.WriteLine($"Padding = {pkg.HeaderPaddingLength}");
                             foreach (var file in pkg.Files)
                             {
-                                fn = GenerateFileName(file.Key, file.Value);
+                                if (AssetFilePathByID.ContainsKey(file.Key))
+                                {
+                                    fn = AssetFilePathByID[file.Key];
+                                    filePath = String.Join(Path.DirectorySeparatorChar, outPath, fn.Replace('/', Path.DirectorySeparatorChar));
+                                    if (!Directory.Exists(Path.GetDirectoryName(filePath)))
+                                        Directory.CreateDirectory(Path.GetDirectoryName(filePath));
+                                }
+                                else
+                                    fn = GenerateFileName(file.Key, file.Value);
                                 Console.WriteLine($"Extracting {fn}...");
                                 tmp = File.Open(String.Join(Path.DirectorySeparatorChar, outPath, fn), FileMode.Create, FileAccess.Write);
                                 file.Value.CopyTo(tmp);
@@ -180,8 +195,12 @@ namespace PKGTool
                             while (!list.EndOfStream)
                             {
                                 fn = list.ReadLine().TrimEnd('\r', '\n');
+                                try {
+                                    pkg.Files.Add(new KeyValuePair<UInt64, MemoryStream>(Convert.ToUInt64("0x" + Path.GetFileNameWithoutExtension(fn), 16), new MemoryStream(File.ReadAllBytes(String.Join(Path.DirectorySeparatorChar, args[1], fn)))));
+                                } catch {
+                                    pkg.Files.Add(new KeyValuePair<UInt64, MemoryStream>(crc.ComputeAsValue(fn), new MemoryStream(File.ReadAllBytes(String.Join(Path.DirectorySeparatorChar, args[1], fn)))));
+                                }
                                 Console.WriteLine($"Adding {fn}...");
-                                pkg.Files.Add(new KeyValuePair<UInt64, MemoryStream>(Convert.ToUInt64("0x" + Path.GetFileNameWithoutExtension(fn), 16), new MemoryStream(File.ReadAllBytes(String.Join(Path.DirectorySeparatorChar, args[1], fn)))));
                             }
                         }
 
