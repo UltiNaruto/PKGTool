@@ -1,8 +1,7 @@
 {
   "profiles": {
     "PKGTool": {
-      "commandName": "Project",
-      "commandLineArgs": "-x \"D:\\Emulateur\\Switch\\Modding\\Metroid Dread\\packs\\maps\\s010_cave\\s010_cave.pkg\""
+      "commandName": "Project"
     }
   }
 }

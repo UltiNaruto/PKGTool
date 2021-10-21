@@ -1,13 +1,12 @@
-﻿using System;
+﻿using Misc.Structs;
+using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 
 namespace Dread.FileFormats
 {
-    public class PKG : Misc.Structs.BinaryStruct
+    public class PKG : BinaryStruct
     {
-        public Int32 HeaderPaddingLength = 0;
         public List<KeyValuePair<UInt64, MemoryStream>> Files = new List<KeyValuePair<UInt64, MemoryStream>>();
 
         public void Close()
@@ -21,14 +20,14 @@ namespace Dread.FileFormats
         {
             Int32 i = 0;
             Int32[,] offsets = new Int32[Files.Count, 2];
-            Int32 cursor = 12 + Files.Count * 16 + HeaderPaddingLength;
-            if ((cursor % 8) != 0) cursor += 8 - (cursor % 8);
+            Int32 cursor = 12 + Files.Count * 16;
+            cursor = cursor.Aligned(128);
             foreach (var file in Files)
             {
                 offsets[i, 0] = cursor;
                 cursor += (Int32)file.Value.Length;
                 offsets[i, 1] = cursor;
-                if ((cursor % 8) != 0) cursor += 8 - (cursor % 8);
+                cursor = cursor.Aligned(8);
                 i++;
             }
             return offsets;
@@ -39,11 +38,11 @@ namespace Dread.FileFormats
             get
             {
                 int len = 12 + Files.Count * 16;
-                if ((len % 8) != 0) len += 8 - (len % 8);
+                len = len.Aligned(128);
                 foreach (var file in Files)
                 {
                     len += (int)file.Value.Length;
-                    if((len % 8) != 0) len += 8 - (len % 8);
+                    len = len.Aligned(128);
                 }
                 return len;
             }
@@ -66,14 +65,13 @@ namespace Dread.FileFormats
                 Offsets.Add(new Int32[] { reader.ReadInt32(), reader.ReadInt32() });
             }
 
-            if (header_size != (Int32)stream.Position)
-            {
-                HeaderPaddingLength = header_size - (Int32)stream.Position;
-                stream.Position += HeaderPaddingLength;
-            }
-
             // padding
-            if ((stream.Position % 8) != 0) stream.Position += 8 - (stream.Position % 8);
+            stream.Position = stream.Position.Aligned(128) - 4;
+
+            if (header_size != (Int32)stream.Position)
+                throw new Exception("Invalid PKG file! (Guessed header size doesn't correspond to the real size)");
+
+            stream.Position = stream.Position.Aligned(128);
 
             data_section_start = (Int32)stream.Position;
 
@@ -85,7 +83,7 @@ namespace Dread.FileFormats
                 Files[i].Value.Position = 0L;
 
                 // padding
-                if ((stream.Position % 8) != 0) stream.Position += 8 - (stream.Position % 8);
+                stream.Position = stream.Position.Aligned(8);
             }
 
             if (data_section_size != (Int32)stream.Position - data_section_start)
@@ -107,17 +105,20 @@ namespace Dread.FileFormats
                 writer.Write(offsets[i, 1]);
             }
 
-            writer.Write(Enumerable.Repeat<byte>(0, HeaderPaddingLength).ToArray());
+            // padding
+            while ((stream.Position + 4) % 128 != 0) writer.Write((byte)0);
 
             header_size = (Int32)stream.Position;
 
             // padding
-            while (stream.Position % 8 != 0) writer.Write((byte)0);
+            while (stream.Position % 128 != 0) writer.Write((byte)0);
 
             data_section_start = (Int32)stream.Position;
 
             for (i = 0; i < Files.Count; i++)
             {
+                if (offsets[i, 0] != (int)stream.Position)
+                    throw new Exception("Wrong starting offset!");
                 Files[i].Value.CopyTo(stream);
                 Files[i].Value.Position = 0L;
 

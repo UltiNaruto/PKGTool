@@ -23,7 +23,7 @@ namespace PKGTool
         {
             String fn = String.Empty;
             BinaryReader reader = new BinaryReader(File);
-            String magic = Encoding.UTF8.GetString(reader.ReadBytes(4), 0, 4);
+            String magic = Encoding.ASCII.GetString(reader.ReadBytes(4), 0, 4);
             switch(magic)
             {
                 case "\x1BLua":
@@ -31,6 +31,9 @@ namespace PKGTool
                     break;
                 case "\x6F\x7F\xF3\x73":
                     fn = $"{ID:X16}.bapd";
+                    break;
+                case "\xFB\x42\x9B\x06":
+                    fn = $"{ID:X16}.bmscu";
                     break;
                 case "BTXT":
                     fn = $"{ID:X16}.txt";
@@ -65,11 +68,17 @@ namespace PKGTool
                 case "MPSI":
                     fn = $"{ID:X16}.bpsi";
                     break;
+                case "MPSY":
+                    fn = $"{ID:X16}.bcptl";
+                    break;
                 case "MSAD":
                     fn = $"{ID:X16}.bmsad";
                     break;
                 case "MSAS":
                     fn = $"{ID:X16}.bmsas";
+                    break;
+                case "MSCD":
+                    fn = $"{ID:X16}.bmscd";
                     break;
                 case "MSHD":
                     fn = $"{ID:X16}.bshdat";
@@ -135,7 +144,6 @@ namespace PKGTool
 
                         using(var list = new StreamWriter(String.Join(Path.DirectorySeparatorChar, outPath, "files.list")))
                         {
-                            list.WriteLine($"Padding = {pkg.HeaderPaddingLength}");
                             foreach (var file in pkg.Files)
                             {
                                 if (AssetFilePathByID.ContainsKey(file.Key))
@@ -191,12 +199,18 @@ namespace PKGTool
 
                         using (var list = new StreamReader(String.Join(Path.DirectorySeparatorChar, args[1], "files.list")))
                         {
-                            pkg.HeaderPaddingLength = Convert.ToInt32(list.ReadLine().Substring("Padding = ".Length));
                             while (!list.EndOfStream)
                             {
                                 fn = list.ReadLine().TrimEnd('\r', '\n');
                                 try {
-                                    pkg.Files.Add(new KeyValuePair<UInt64, MemoryStream>(Convert.ToUInt64("0x" + Path.GetFileNameWithoutExtension(fn), 16), new MemoryStream(File.ReadAllBytes(String.Join(Path.DirectorySeparatorChar, args[1], fn)))));
+                                    if (Path.GetFileNameWithoutExtension(fn).Length == 16)
+                                    {
+                                        pkg.Files.Add(new KeyValuePair<UInt64, MemoryStream>(Convert.ToUInt64(Path.GetFileNameWithoutExtension(fn), 16), new MemoryStream(File.ReadAllBytes(String.Join(Path.DirectorySeparatorChar, args[1], fn)))));
+                                    }
+                                    else
+                                    {
+                                        pkg.Files.Add(new KeyValuePair<UInt64, MemoryStream>(crc.ComputeAsValue(fn), new MemoryStream(File.ReadAllBytes(String.Join(Path.DirectorySeparatorChar, args[1], fn)))));
+                                    }
                                 } catch {
                                     pkg.Files.Add(new KeyValuePair<UInt64, MemoryStream>(crc.ComputeAsValue(fn), new MemoryStream(File.ReadAllBytes(String.Join(Path.DirectorySeparatorChar, args[1], fn)))));
                                 }
