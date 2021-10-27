@@ -54,7 +54,7 @@ namespace Dread.FileFormats
             List<UInt64> IDs = new List<UInt64>();
             List<Int32[]> Offsets = new List<Int32[]>();
 
-            var reader = new BinaryReader(stream);
+            var reader = new BinaryReaderLE(stream);
             Int32 header_size = reader.ReadInt32();
             Int32 data_section_size = reader.ReadInt32();
             Int32 file_count = reader.ReadInt32();
@@ -95,7 +95,7 @@ namespace Dread.FileFormats
             Int32 i, header_size, data_section_start, data_section_size;
             Int32[,] offsets = GenerateFileOffsets();
 
-            var writer = new BinaryWriter(stream);
+            var writer = new BinaryWriterLE(stream);
             stream.Position += 8;
             writer.Write(Files.Count);
             for(i=0;i<Files.Count;i++)
