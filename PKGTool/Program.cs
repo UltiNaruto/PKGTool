@@ -177,7 +177,7 @@ namespace PKGTool
                         if (args.Length == 4)
                         {
                             if (args[2] == "-o")
-                                outPath = args[2];
+                                outPath = args[3];
                             else
                             {
                                 Usage();
