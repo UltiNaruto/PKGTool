@@ -90,7 +90,7 @@ namespace System.IO
 
         public override decimal ReadDecimal()
         {
-            throw new NotImplementedException();
+            return base.ReadDecimal();
         }
 
         public override sbyte ReadSByte()

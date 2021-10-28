@@ -1,5 +1,4 @@
-﻿using System.Linq;
-using System.Text;
+﻿using System.Text;
 
 namespace System.IO
 {
@@ -90,17 +89,17 @@ namespace System.IO
 
         public override void Write(UInt16 v)
         {
-            Write(v);
+            base.Write(v);
         }
 
         public override void Write(UInt32 v)
         {
-            Write(v);
+            base.Write(v);
         }
 
         public override void Write(UInt64 v)
         {
-            Write(v);
+            base.Write(v);
         }
 
         public override void Write(Single v)
