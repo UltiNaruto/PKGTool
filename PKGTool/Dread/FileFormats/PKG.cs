@@ -8,6 +8,7 @@ namespace Dread.FileFormats
     public class PKG : BinaryStruct
     {
         public List<KeyValuePair<UInt64, MemoryStream>> Files = new List<KeyValuePair<UInt64, MemoryStream>>();
+        public bool IgnoreDataSectionSizeCheck = false;
 
         public void Close()
         {
@@ -86,7 +87,7 @@ namespace Dread.FileFormats
                 stream.Position = stream.Position.Aligned(8);
             }
 
-            if (data_section_size != (Int32)stream.Position - data_section_start)
+            if (!IgnoreDataSectionSizeCheck && data_section_size != (Int32)stream.Position - data_section_start)
                 throw new Exception("Invalid PKG file! (Guessed data section size doesn't correspond to the real size)");
         }
 

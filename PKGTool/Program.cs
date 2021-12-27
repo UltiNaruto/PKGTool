@@ -10,13 +10,131 @@ namespace PKGTool
 {
     class Program
     {
+        struct Argument
+        {
+            public String cmd;
+            public String[] args;
+        }
+
         static void Usage()
         {
             Console.WriteLine("PKG Tool");
             Console.WriteLine("-----------------------");
             Console.WriteLine();
-            Console.WriteLine("Extract : PKGTool -x <input path> [-o <output path>");
-            Console.WriteLine("Create : PKGTool -c <input path> [-o <output path>");
+            Console.WriteLine("Extract : PKGTool -x <input path> [-o <output path>] [-i]");
+            Console.WriteLine("Create : PKGTool -c <input path> [-o <output path>]");
+        }
+
+        static bool ParseArguments(String[] args, out List<Argument> outArgs)
+        {
+            int i;
+            outArgs = new List<Argument>();
+
+            for (i = 0; i < args.Length; i++)
+            {
+                if (i < args.Length - 1)
+                {
+                    if (args[i] == "-c")
+                    {
+                        if (outArgs.Any(a => a.cmd == "-x"))
+                        {
+                            Console.WriteLine("Cannot compress when extracting a file already!");
+                            return false;
+                        }
+
+                        if (args[i + 1].StartsWith("-"))
+                            return false;
+
+                        outArgs.Add(new Argument()
+                        {
+                            cmd = args[i],
+                            args = new String[] { args[i + 1] }
+                        });
+                        i++;
+                        continue;
+                    }
+
+                    if (args[i] == "-x")
+                    {
+                        if (outArgs.Any(a => a.cmd == "-c"))
+                        {
+                            Console.WriteLine("Cannot extract when compressing a file already!");
+                            return false;
+                        }
+
+                        if (args[i + 1].StartsWith("-"))
+                            return false;
+
+                        outArgs.Add(new Argument()
+                        {
+                            cmd = args[i],
+                            args = new String[] { args[i + 1] }
+                        });
+                        i++;
+                        continue;
+                    }
+
+                    if (args[i] == "-o")
+                    {
+                        if (!outArgs.Any(a => a.cmd == "-c") && !outArgs.Any(a => a.cmd == "-x"))
+                        {
+                            Console.WriteLine("Are you compressing or extracting?");
+                            return false;
+                        }
+
+                        if (args[i + 1].StartsWith("-"))
+                            return false;
+
+                        outArgs.Add(new Argument()
+                        {
+                            cmd = args[i],
+                            args = new String[] { args[i + 1] }
+                        });
+                        i++;
+                        continue;
+                    }
+
+                    if (args[i] == "-i")
+                    {
+                        if (outArgs.Any(a => a.cmd == "-x"))
+                            return false;
+
+                        if (!args[i+1].StartsWith("-"))
+                            return false;
+
+                        outArgs.Add(new Argument()
+                        {
+                            cmd = args[i],
+                            args = new String[0]
+                        });
+                    }
+                }
+                else
+                {
+                    if (args[i] == "-c" ||
+                        args[i] == "-x" ||
+                        args[i] == "-o")
+                    {
+                        return false;
+                    }
+
+                    if (args[i] == "-i")
+                    {
+                        if (!outArgs.Any(a => a.cmd == "-x"))
+                            return false;
+
+                        outArgs.Add(new Argument()
+                        {
+                            cmd = args[i],
+                            args = new String[0]
+                        });
+                    }
+                }
+            }
+
+            if (!outArgs.Any(a => a.cmd == "-c") && !outArgs.Any(a => a.cmd == "-x"))
+                return false;
+            return true;
         }
 
         static String GenerateFileName(UInt64 ID, MemoryStream File)
@@ -100,132 +218,115 @@ namespace PKGTool
             return fn;
         }
 
-        static void Main(string[] args)
+        static void Main(string[] argv)
         {
+            if(!ParseArguments(argv, out List<Argument> arguments))
+            {
+                Usage();
+                return;
+            }
+
+            bool isCompressing = arguments.Any(a => a.cmd == "-c");
+            bool isExtracting = arguments.Any(a => a.cmd == "-x");
+            bool specifyOutputFolder = arguments.Any(a => a.cmd == "-o");
+            bool ignoreDataSectionSizeCheck = arguments.Any(a => a.cmd == "-i");
+            Dictionary<String, UInt64> AssetIDByFilePath = JObject.Parse(Encoding.UTF8.GetString(Properties.Resources.resource_infos)).ToObject<Dictionary<String, UInt64>>();
+            Dictionary<UInt64, String> AssetFilePathByID = AssetIDByFilePath.ToDictionary(kvp => kvp.Value, kvp => kvp.Key);
             CRC64 crc = new CRC64();
             FileStream tmp = null;
             String fn = String.Empty;
             String filePath = String.Empty;
+            String inPath = String.Empty;
             String outPath = String.Empty;
-            Dread.FileFormats.PKG pkg = new Dread.FileFormats.PKG();
-            Dictionary<String, UInt64> AssetIDByFilePath = JObject.Parse(Encoding.UTF8.GetString(Properties.Resources.resource_infos)).ToObject<Dictionary<String, UInt64>>();
-            Dictionary<UInt64, String> AssetFilePathByID = AssetIDByFilePath.ToDictionary(kvp => kvp.Value, kvp => kvp.Key);
+
             try
             {
-                if (args.Length >= 2)
+                if (isCompressing)
+                    inPath = arguments.Where(a => a.cmd == "-c").FirstOrDefault().args[0];
+                else if (isExtracting)
+                    inPath = arguments.Where(a => a.cmd == "-x").FirstOrDefault().args[0];
+
+                if(specifyOutputFolder)
+                    outPath = arguments.Where(a => a.cmd == "-o").FirstOrDefault().args[0];
+                else
+                    outPath = Path.Combine(Directory.GetCurrentDirectory(), Path.GetFileNameWithoutExtension(inPath));
+
+                Dread.FileFormats.PKG pkg = new Dread.FileFormats.PKG();
+                if (isExtracting)
                 {
-                    if (args[0] == "-x")
+                    pkg.IgnoreDataSectionSizeCheck = ignoreDataSectionSizeCheck;
+
+                    if (!File.Exists(inPath))
+                        throw new FileNotFoundException($"Couldn't find the file {inPath}");
+
+                    pkg.import(File.OpenRead(inPath));
+
+                    if (!Directory.Exists(outPath))
+                        Directory.CreateDirectory(outPath);
+
+                    using(var list = new StreamWriter(Path.Combine(outPath, "files.list")))
                     {
-                        if (!File.Exists(args[1]))
-                            throw new FileNotFoundException($"Couldn't find the file {args[1]}");
-
-                        pkg.import(File.OpenRead(args[1]));
-
-                        if (args.Length == 4)
+                        foreach (var file in pkg.Files)
                         {
-                            if (args[2] == "-o")
-                                outPath = args[3];
-                            else
+                            if (AssetFilePathByID.ContainsKey(file.Key))
                             {
-                                Usage();
-                                return;
+                                fn = AssetFilePathByID[file.Key];
+                                filePath = Path.Combine(outPath, fn.Replace('/', Path.DirectorySeparatorChar));
+                                if (!Directory.Exists(Path.GetDirectoryName(filePath)))
+                                    Directory.CreateDirectory(Path.GetDirectoryName(filePath));
                             }
+                            else
+                                fn = GenerateFileName(file.Key, file.Value);
+                            Console.WriteLine($"Extracting {fn}...");
+                            tmp = File.Open(Path.Combine(outPath, fn), FileMode.Create, FileAccess.Write);
+                            file.Value.CopyTo(tmp);
+                            file.Value.Position = 0L;
+                            tmp.Close();
+                            list.WriteLine(fn);
                         }
-                        else if (args.Length == 2)
-                            outPath = String.Join(Path.DirectorySeparatorChar, Directory.GetCurrentDirectory(), Path.GetFileNameWithoutExtension(args[1]));
-                        else
-                        {
-                            Usage();
-                            return;
-                        }
+                    }
 
-                        if (!Directory.Exists(outPath))
-                            Directory.CreateDirectory(outPath);
+                    pkg.Close();
+                }
+                else if (isCompressing)
+                {
+                    if (!Directory.Exists(inPath))
+                        throw new FileNotFoundException($"Couldn't find the folder {inPath}");
 
-                        using(var list = new StreamWriter(String.Join(Path.DirectorySeparatorChar, outPath, "files.list")))
+                    if (!File.Exists(Path.Combine(inPath, "files.list")))
+                        throw new FileNotFoundException($"Couldn't find the file files.list");
+
+                    if (Path.GetExtension(outPath) == String.Empty)
+                        outPath += ".pkg";
+                    else if (Path.GetExtension(outPath).ToLower() != ".pkg")
+                        outPath = Path.ChangeExtension(outPath, ".pkg");
+
+                    using (var list = new StreamReader(Path.Combine(inPath, "files.list")))
+                    {
+                        while (!list.EndOfStream)
                         {
-                            foreach (var file in pkg.Files)
-                            {
-                                if (AssetFilePathByID.ContainsKey(file.Key))
+                            fn = list.ReadLine().TrimEnd('\r', '\n');
+                            try {
+                                if (Path.GetFileNameWithoutExtension(fn).Length == 16)
                                 {
-                                    fn = AssetFilePathByID[file.Key];
-                                    filePath = String.Join(Path.DirectorySeparatorChar, outPath, fn.Replace('/', Path.DirectorySeparatorChar));
-                                    if (!Directory.Exists(Path.GetDirectoryName(filePath)))
-                                        Directory.CreateDirectory(Path.GetDirectoryName(filePath));
+                                    pkg.Files.Add(new KeyValuePair<UInt64, MemoryStream>(Convert.ToUInt64(Path.GetFileNameWithoutExtension(fn), 16), new MemoryStream(File.ReadAllBytes(Path.Combine(inPath, fn)))));
                                 }
                                 else
-                                    fn = GenerateFileName(file.Key, file.Value);
-                                Console.WriteLine($"Extracting {fn}...");
-                                tmp = File.Open(String.Join(Path.DirectorySeparatorChar, outPath, fn), FileMode.Create, FileAccess.Write);
-                                file.Value.CopyTo(tmp);
-                                file.Value.Position = 0L;
-                                tmp.Close();
-                                list.WriteLine(fn);
-                            }
-                        }
-
-                        pkg.Close();
-                    }
-                    else if (args[0] == "-c")
-                    {
-                        if (!Directory.Exists(args[1]))
-                            throw new FileNotFoundException($"Couldn't find the folder {args[1]}");
-
-                        if (!File.Exists(String.Join(Path.DirectorySeparatorChar, args[1], "files.list")))
-                            throw new FileNotFoundException($"Couldn't find the file files.list");
-
-                        if (args.Length == 4)
-                        {
-                            if (args[2] == "-o")
-                                outPath = args[3];
-                            else
-                            {
-                                Usage();
-                                return;
-                            }
-                        }
-                        else if (args.Length == 2)
-                            outPath = String.Join(Path.DirectorySeparatorChar, Directory.GetCurrentDirectory(), Path.GetFileNameWithoutExtension(args[1]));
-                        else
-                        {
-                            Usage();
-                            return;
-                        }
-
-                        if (Path.GetExtension(outPath) == String.Empty)
-                            outPath += ".pkg";
-                        else if (Path.GetExtension(outPath).ToLower() != ".pkg")
-                            outPath = Path.ChangeExtension(outPath, ".pkg");
-
-                        using (var list = new StreamReader(String.Join(Path.DirectorySeparatorChar, args[1], "files.list")))
-                        {
-                            while (!list.EndOfStream)
-                            {
-                                fn = list.ReadLine().TrimEnd('\r', '\n');
-                                try {
-                                    if (Path.GetFileNameWithoutExtension(fn).Length == 16)
-                                    {
-                                        pkg.Files.Add(new KeyValuePair<UInt64, MemoryStream>(Convert.ToUInt64(Path.GetFileNameWithoutExtension(fn), 16), new MemoryStream(File.ReadAllBytes(String.Join(Path.DirectorySeparatorChar, args[1], fn)))));
-                                    }
-                                    else
-                                    {
-                                        pkg.Files.Add(new KeyValuePair<UInt64, MemoryStream>(crc.ComputeAsValue(fn), new MemoryStream(File.ReadAllBytes(String.Join(Path.DirectorySeparatorChar, args[1], fn)))));
-                                    }
-                                } catch {
-                                    pkg.Files.Add(new KeyValuePair<UInt64, MemoryStream>(crc.ComputeAsValue(fn), new MemoryStream(File.ReadAllBytes(String.Join(Path.DirectorySeparatorChar, args[1], fn)))));
+                                {
+                                    pkg.Files.Add(new KeyValuePair<UInt64, MemoryStream>(crc.ComputeAsValue(fn), new MemoryStream(File.ReadAllBytes(Path.Combine(inPath, fn)))));
                                 }
-                                Console.WriteLine($"Adding {fn}...");
+                            } catch {
+                                pkg.Files.Add(new KeyValuePair<UInt64, MemoryStream>(crc.ComputeAsValue(fn), new MemoryStream(File.ReadAllBytes(Path.Combine(inPath, fn)))));
                             }
+                            Console.WriteLine($"Adding {fn}...");
                         }
-
-                        tmp = File.Open(outPath, FileMode.Create, FileAccess.Write);
-                        pkg.export(tmp);
-                        tmp.Close();
-                        pkg.Close();
                     }
+
+                    tmp = File.Open(outPath, FileMode.Create, FileAccess.Write);
+                    pkg.export(tmp);
+                    tmp.Close();
+                    pkg.Close();
                 }
-                else
-                    Usage();
             } catch (Exception ex) {
                 Console.WriteLine("An error occured!");
                 Console.WriteLine(ex.Message);

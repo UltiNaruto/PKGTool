@@ -1,7 +1,8 @@
 {
   "profiles": {
     "PKGTool": {
-      "commandName": "Project"
+      "commandName": "Project",
+      "commandLineArgs": "-x \"D:\\Emulateur\\Switch\\Modding\\Metroid Dread\\romfs\\packs\\players\\samus.pkg\" -i"
     }
   }
 }
